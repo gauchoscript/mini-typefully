@@ -53,7 +53,7 @@ const NodeView = (nodeViewProps: NodeViewProps) => {
       .run();
   }, [editor, getPos, node.nodeSize]);
 
-  const handleRemoteAtom = useCallback(() => {
+  const handleRemoveAtom = useCallback(() => {
     deleteNode();
     editor.commands.focus();
   }, [deleteNode, editor.commands]);
@@ -83,7 +83,7 @@ const NodeView = (nodeViewProps: NodeViewProps) => {
           size="small"
           className="mt-2 ml-3"
           variant="secondary"
-          onClick={handleRemoteAtom}
+          onClick={handleRemoveAtom}
           tabIndex={-1}
           icon={<MinusIcon />}
         />
