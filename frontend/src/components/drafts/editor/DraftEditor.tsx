@@ -14,6 +14,7 @@ import { Draft } from "../../../types";
 import cn from "../../../utils/cn";
 import fetchJSON from "../../../utils/fetchJSON";
 import { AtomNode } from "./AtomNode";
+import { EditorView } from "@tiptap/pm/view";
 // import applyDevTools from "prosemirror-dev-tools";
 
 export const DraftEditor = () => {
@@ -102,6 +103,45 @@ const DraftEditorInner = ({
     onUpdate,
   });
 
+  const onPaste = useCallback((_view: EditorView, event: ClipboardEvent) => {    
+    const MAX_CHARACTERS = 280;
+    const text: string = event.clipboardData?.getData("text") || "";
+  
+    let tweets: Array<string> = [""];
+  
+    if (text.length > MAX_CHARACTERS) {
+      const sentences: Array<string> = text.split(/\.\s+/).map((sentence) => sentence.trim());
+      
+      for (let index = 0; index < sentences.length; index++) {
+        const sentence = sentences[index];
+        const lastSentence: string = tweets.pop() || "";
+        const newSentence: string = lastSentence.concat(sentence);
+        if (newSentence.length <= MAX_CHARACTERS) {
+          tweets.push(newSentence)
+        } else {
+          tweets = [...tweets, lastSentence, sentence];
+        }
+      }
+    }
+  
+    const atoms = tweets.map((texto) => ({ 
+      type: "atom",
+      content: [{
+        type: "paragraph",
+        content: [{
+          type: "text",
+          text: texto,
+        }]
+      }]
+    }));
+  
+    const currentPos = editor?.state.selection || 0;
+
+    editor?.commands.insertContentAt(currentPos, atoms);
+
+    return true;
+  }, [editor]);
+
   // // ProseMirror dev tools, might be useful for debugging
   // useEffect(() => {
   //   if (editor && editor.view) {
@@ -111,10 +151,18 @@ const DraftEditorInner = ({
 
   // focus the editor on first open
   useEffect(() => {
-    if (editor?.isEditable) {
-      editor.commands.focus("end");
+    if (editor) {
+      const editorProps = {
+        handlePaste: onPaste,
+      };
+
+      editor.setOptions({ editorProps });
+
+      if (editor.isEditable) {
+        editor.commands.focus("end");
+      }
     }
-  }, [editor]);
+  }, [editor, onPaste]);
 
   return (
     <EditorContent
