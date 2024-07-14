@@ -7,14 +7,15 @@ import {
   useEditor,
 } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useCallback, useContext, useEffect } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { SelectedDraftContext } from "../../../context/SelectedDraftContext";
 import { Draft } from "../../../types";
 import cn from "../../../utils/cn";
 import fetchJSON from "../../../utils/fetchJSON";
 import { AtomNode } from "./AtomNode";
-import { EditorView } from "@tiptap/pm/view";
+import { PasteAlert } from "../../ui/alert";
+import { EditorProps } from "@tiptap/pm/view";
 // import applyDevTools from "prosemirror-dev-tools";
 
 export const DraftEditor = () => {
@@ -91,6 +92,10 @@ const DraftEditorInner = ({
   initialContent: EditorOptions["content"];
   onUpdate: EditorOptions["onUpdate"];
 }) => {
+  const [open, setOpen] = useState(false);
+  const [pastedText, setPastedText] = useState("");
+  const MAX_CHARACTERS = 280;
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -103,44 +108,65 @@ const DraftEditorInner = ({
     onUpdate,
   });
 
-  const onPaste = useCallback((_view: EditorView, event: ClipboardEvent) => {    
-    const MAX_CHARACTERS = 280;
-    const text: string = event.clipboardData?.getData("text") || "";
-  
-    let tweets: Array<string> = [""];
-  
+  const onPaste = (event: ClipboardEvent) => {
+    const text = event.clipboardData?.getData("text/plain") || "";
+    let controlPaste = false;
+
     if (text.length > MAX_CHARACTERS) {
-      const sentences: Array<string> = text.split(/\.\s+/).map((sentence) => sentence.trim());
-      
-      for (let index = 0; index < sentences.length; index++) {
-        const sentence = sentences[index];
-        const lastSentence: string = tweets.pop() || "";
-        const newSentence: string = lastSentence.concat(sentence);
-        if (newSentence.length <= MAX_CHARACTERS) {
-          tweets.push(newSentence)
-        } else {
-          tweets = [...tweets, lastSentence, sentence];
-        }
+      setPastedText(text);
+      setOpen(true);
+
+      controlPaste = true;
+    }
+
+    return controlPaste;
+  };
+
+  const onSplit = useCallback(() => {
+    let tweets = [""];
+
+    const sentences = pastedText
+      .split(/\.\s+/)
+      .map((sentence) => sentence.trim());
+
+    for (let index = 0; index < sentences.length; index++) {
+      const sentence = sentences[index];
+      const lastSentence = tweets.pop() || "";
+      const newSentence = lastSentence.concat(sentence);
+      if (newSentence.length <= MAX_CHARACTERS) {
+        tweets.push(newSentence);
+      } else {
+        tweets = [...tweets, lastSentence, sentence];
       }
     }
-  
-    const atoms = tweets.map((texto) => ({ 
+
+    const atoms = tweets.map((text) => ({
       type: "atom",
-      content: [{
-        type: "paragraph",
-        content: [{
-          type: "text",
-          text: texto,
-        }]
-      }]
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text,
+            },
+          ],
+        },
+      ],
     }));
-  
+
+    setOpen(false);
+
     const currentPos = editor?.state.selection || 0;
-
     editor?.commands.insertContentAt(currentPos, atoms);
+  }, [editor, pastedText]);
 
-    return true;
-  }, [editor]);
+  const onCancel = useCallback(() => {
+    setOpen(false);
+
+    const currentPos = editor?.state.selection || 0;
+    editor?.commands.insertContentAt(currentPos, pastedText);
+  }, [editor, pastedText]);
 
   // // ProseMirror dev tools, might be useful for debugging
   // useEffect(() => {
@@ -152,8 +178,8 @@ const DraftEditorInner = ({
   // focus the editor on first open
   useEffect(() => {
     if (editor) {
-      const editorProps = {
-        handlePaste: onPaste,
+      const editorProps: EditorProps = {
+        handlePaste: (_view, event) => onPaste(event),
       };
 
       editor.setOptions({ editorProps });
@@ -162,7 +188,7 @@ const DraftEditorInner = ({
         editor.commands.focus("end");
       }
     }
-  }, [editor, onPaste]);
+  }, [editor]);
 
   return (
     <EditorContent
@@ -171,7 +197,9 @@ const DraftEditorInner = ({
         "[&>div>*]:w-full [&>div>*]:max-w-[600px] [&>div>*]:mx-auto" // Center content
       )}
       editor={editor}
-    />
+    >
+      <PasteAlert open={open} onCancel={onCancel} onAction={onSplit} />
+    </EditorContent>
   );
 };
 
